@@ -1,0 +1,180 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System.Diagnostics;
+using System;
+using UnityEngine.UI;
+
+public class Pathfinding : MonoBehaviour
+{
+    public Text Dist;
+    public Text Time;
+    public Text EDam;
+    public Text HDam;
+    PathRequestManager requestManager;
+    Grids grid;
+
+    void Awake()
+    {
+        requestManager = GetComponent<PathRequestManager>();
+        grid = GetComponent<Grids>();
+    }
+
+    public void StartFindPath(Vector3 startPos, Vector3 targetPos, int mode)
+    {
+        StartCoroutine(FindPath(startPos, targetPos, mode));
+    }
+
+    IEnumerator FindPath(Vector3 startPos, Vector3 targetPos, int mode)
+    {
+        Stopwatch sw = new Stopwatch();
+        sw.Start();
+
+        Vector3[] waypoints = new Vector3[0];
+        bool pathSuccess = false;
+
+        Node startNode = grid.NodeFromWorldPoint(startPos);
+        Node targetNode = grid.NodeFromWorldPoint(targetPos);
+
+        if(startNode.walkable && targetNode.walkable)
+        {
+            Heap<Node> openSet = new Heap<Node>(grid.MaxSize);
+            HashSet<Node> closedSet = new HashSet<Node>();
+            openSet.Add(startNode);
+
+            while (openSet.Count > 0)
+            {
+                Node currentNode = openSet.RemoveFirst();
+                closedSet.Add(currentNode);
+
+                if (currentNode == targetNode)
+                {
+                    sw.Stop();
+                    if(Time.text == "0")
+                    Time.text = sw.ElapsedMilliseconds + "ms";
+                    pathSuccess = true;
+                    break;
+                }
+                foreach (Node neighbour in grid.GetNeighbours(currentNode))
+                {
+                    
+                    int newMovementCostToNeighbour;
+                    if (!neighbour.walkable || closedSet.Contains(neighbour))
+                    {
+                        continue;
+                    }
+                    if(mode == 0)
+                    {
+                        newMovementCostToNeighbour = currentNode.gCost + neighbour.movementPenalty;
+                        if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+                        {
+                            neighbour.gCost = newMovementCostToNeighbour;
+                            neighbour.hCost = GetDistance(neighbour, targetNode);
+                            neighbour.parent = currentNode;
+                            if (!openSet.Contains(neighbour))
+                            {
+                                openSet.Add(neighbour);
+                            }
+                            else
+                            {
+                                openSet.UpdateItem(neighbour);
+                            }
+                        }
+                    }
+                    else if(mode == 1)
+                    {
+                        newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour);
+                        if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+                        {
+                            neighbour.gCost = newMovementCostToNeighbour;
+                            neighbour.hCost = GetDistance(neighbour, targetNode);
+                            neighbour.parent = currentNode;
+                            if (!openSet.Contains(neighbour))
+                            {
+                                openSet.Add(neighbour);
+                            }
+                            else
+                            {
+                                openSet.UpdateItem(neighbour);
+                            }
+                        }
+                    }     
+                }
+            }
+        }  
+        yield return null;
+        if (pathSuccess)
+        {
+            waypoints = RetracePath(startNode, targetNode);
+            Dist.text = pathStats(startNode, targetNode)[2].ToString();
+            //Time.text = sw.ElapsedMilliseconds.ToString() +"ms";
+            EDam.text = pathStats(startNode, targetNode)[0].ToString();
+            HDam.text = pathStats(startNode, targetNode)[1].ToString();
+            UnityEngine.Debug.Log("Path Cost = " + pathStats(startNode, targetNode)[3]);
+        }
+        requestManager.FinishedProcessingPath(waypoints, pathSuccess, pathStats(startNode, targetNode)[0], pathStats(startNode, targetNode)[1]);
+    }
+
+    Vector3[] RetracePath(Node startNode, Node endNode)
+    {
+        List<Node> path = new List<Node>();
+        Node currentNode = endNode;
+
+        while (currentNode != startNode)
+        {
+            path.Add(currentNode);
+            currentNode = currentNode.parent;
+        }
+        Vector3[] waypoints = SimplifyPath(path);
+        Array.Reverse(waypoints);
+        return waypoints;
+    }
+
+    Vector3[] SimplifyPath(List<Node> path)
+    {
+        List<Vector3> waypoints = new List<Vector3>();
+        Vector2 directionOld = Vector2.zero;
+
+        for (int i = 1; i < path.Count; i++)
+        {
+            Vector2 directionNew = new Vector2(path[i - 1].gridX - path[i].gridX, path[i - 1].gridY - path[i].gridY);
+            if (directionNew != directionOld)
+            {
+                waypoints.Add(path[i-1].worldPosition);
+            }
+            directionOld = directionNew;
+        }
+        return waypoints.ToArray();
+    }
+
+    int[] pathStats(Node startNode, Node endNode)
+    {
+        /* array info
+        pStats0 = eDamage
+        pStats1 = hDamage
+        pStats2 = distTravelled
+        pStats3 = cost*/
+        int[] pStats = new int[4];
+        Node currentNode = endNode;
+
+        while (currentNode != startNode)
+        {
+            pStats[0] += currentNode.energyPenalty;
+            pStats[1] += currentNode.healthPenalty;
+            pStats[2] ++;
+            currentNode = currentNode.parent;
+        }
+        pStats[3] = pStats[0] + pStats[1];
+        return pStats;
+    }
+
+    int GetDistance(Node nodeA, Node nodeB)
+    {
+        int disX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
+        int disY = Mathf.Abs(nodeA.gridY - nodeB.gridY);
+
+        if (disX > disY)
+            return 14 * disY + 10 * (disX - disY);
+        return 14 * disX + 10 * (disY - disX);
+    }
+}
