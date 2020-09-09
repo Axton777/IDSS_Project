@@ -1,0 +1,21 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class btnHndler : MonoBehaviour
+{
+    public GameObject mapGeneratorUI;
+    public GameObject thisUI;
+
+    public void onStart()
+    {
+        mapGeneratorUI.SetActive(true);
+        thisUI.SetActive(false);
+        
+    }
+
+    public void onExit()
+    {
+        UnityEditor.EditorApplication.isPlaying = false;
+    }
+}
