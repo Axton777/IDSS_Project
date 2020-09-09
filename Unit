@@ -1,0 +1,91 @@
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class Unit : MonoBehaviour
+{
+    public int mode = 0;
+    float delay = 0;
+    public Transform target;
+    public bool goPathfinding = false;
+    float speed = 25;
+    Vector3[] path;
+    int targetIndex;
+    ObjectStats objectStats;
+    public GameObject finishedScreen;
+
+    void Start()
+    {
+        objectStats = GetComponent<ObjectStats>();
+    }
+
+    public void goPathfind(bool go)
+    {
+        goPathfinding = go;
+    }
+
+    private void Update()
+    {
+        delay += Time.deltaTime;
+        if (Input.GetMouseButtonDown(1) && delay>1)
+        {
+            PathRequestManager.RequestPath(transform.position, target.position, mode, OnPathFound);
+            delay = 0;
+        }
+    }
+
+    public void OnPathFound(Vector3[] newPath, int eDam, int hDam, bool pathSuccessful)
+    {
+        if (pathSuccessful)
+        {
+            path = newPath;
+            objectStats.energy -= eDam;
+            objectStats.health -= hDam;
+            StopCoroutine("FollowPath");
+            StartCoroutine("FollowPath");
+        }
+    }
+
+    IEnumerator FollowPath()
+    {
+        Vector3 currentWaypoint = path[0];
+
+        while (true)
+        {
+            if(transform.position == currentWaypoint)
+            {
+                targetIndex++;
+                if(targetIndex >= path.Length)
+                {
+                    finishedScreen.SetActive(true);
+                    yield break;
+                }
+                currentWaypoint = path[targetIndex];
+            }
+
+            transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
+            yield return null;
+        }
+    }
+
+    public void OnDrawGizmos()
+    {
+        if(path != null)
+        {
+            for (int i = targetIndex; i<path.Length; i++)
+            {
+                Gizmos.color = Color.black;
+                Gizmos.DrawCube(path[i], Vector3.one);
+
+                if(i == targetIndex)
+                {
+                    Gizmos.DrawLine(transform.position, path[i]);
+                }
+                else
+                {
+                    Gizmos.DrawLine(path[i - 1], path[i]);
+                }
+            }
+        }
+    }
+}
